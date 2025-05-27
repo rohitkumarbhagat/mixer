@@ -50,6 +50,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/datacommonsorg/mixer/internal/server/interceptor"
+
 	cbt "cloud.google.com/go/bigtable"
 )
 
@@ -123,7 +125,9 @@ func main() {
 	}
 
 	// Create grpc server.
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptor.LoggingInterceptor),
+	)
 
 	// Data sources.
 	sources := []*datasource.DataSource{}
