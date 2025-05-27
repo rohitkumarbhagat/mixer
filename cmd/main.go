@@ -101,6 +101,8 @@ var (
 	redisInfo = flag.String("redis_info", "", "Yaml formatted text containing information for redis instances.")
 	// V3 API.
 	enableV3 = flag.Bool("enable_v3", false, "Enable datasources in V3 API.")
+	// Logging interceptor.
+	loggingPercentage = flag.Int("logging_percentage", 100, "Percentage of successful requests to log (0-100).")
 )
 
 func main() {
@@ -108,6 +110,11 @@ func main() {
 	// Parse flag
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	// Set logging percentage for the interceptor.
+	// This must be done after flag.Parse() and before grpc.NewServer()
+	// as the interceptor's behavior depends on this value.
+	interceptor.SetLoggingPercentage(*loggingPercentage)
 
 	ctx := context.Background()
 	var err error
