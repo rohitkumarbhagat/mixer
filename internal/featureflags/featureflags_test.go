@@ -69,6 +69,17 @@ flags:
 			wantErr: false,
 		},
 		{
+			name: "enable http server",
+			fileContent: `
+flags:
+  EnableHTTPServer: true
+`,
+			want: expectedFlags(func(f *Flags) {
+				f.EnableHTTPServer = true
+			}),
+			wantErr: false,
+		},
+		{
 			name: "all flags",
 			fileContent: `
 flags:

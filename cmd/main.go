@@ -59,6 +59,7 @@ import (
 var (
 	// Server config
 	port           = flag.Int("port", 12345, "Port on which to run the server.")
+	httpPort       = flag.Int("http_port", 8082, "Port on which to run the HTTP server. Set to 0 to disable.")
 	hostProject    = flag.String("host_project", "", "The GCP project to run the mixer instance.")
 	writeUsageLogs = flag.Bool("write_usage_logs", false, "Whether to write usage logs.")
 	// BigQuery (Sparql)
@@ -482,6 +483,21 @@ func main() {
 			httpProfileFrom := fmt.Sprintf("localhost:%d", *httpProfilePort)
 			slog.Info("Serving profile over HTTP", "address", httpProfileFrom)
 			slog.Error("Error serving HTTP profile", "error", http.ListenAndServe(httpProfileFrom, nil))
+		}()
+	}
+	if flags.EnableHTTPServer && *httpPort != 0 {
+		httpLis, err := net.Listen("tcp", fmt.Sprintf(":%d", *httpPort))
+		if err != nil {
+			slog.Error("Failed to listen on HTTP network", "error", err)
+			os.Exit(1)
+		}
+		httpServer := &http.Server{Handler: mixerServer.HTTPHandler()}
+		go func() {
+			slog.Info("HTTP server ready to serve", "port", *httpPort)
+			if err := httpServer.Serve(httpLis); err != nil && err != http.ErrServerClosed {
+				slog.Error("Failed to serve HTTP", "error", err)
+				os.Exit(1)
+			}
 		}()
 	}
 	slog.Info("About to listen")

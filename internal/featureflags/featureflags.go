@@ -46,6 +46,8 @@ type Flags struct {
 	UseStatisticalCalculation bool `yaml:"UseStatisticalCalculation"`
 	// Whether to enable the SDMX API endpoint.
 	EnableSDMXDataApi bool `yaml:"EnableSDMXDataApi"`
+	// Whether to enable the native HTTP API listener.
+	EnableHTTPServer bool `yaml:"EnableHTTPServer"`
 }
 
 // setDefaultValues creates a new Flags struct with default values.
@@ -60,6 +62,7 @@ func setDefaultValues() *Flags {
 		V2DivertFraction:          0.0,
 		UseStatisticalCalculation: false,
 		EnableSDMXDataApi:         false,
+		EnableHTTPServer:          false,
 	}
 }
 

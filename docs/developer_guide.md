@@ -62,6 +62,27 @@ Once the Mixer is ready to serve, you can send some sample gRPC requests:
 go run examples/api/main.go
 ```
 
+### Enable the native HTTP listener
+
+The native HTTP listener is disabled unless the feature flag config contains:
+
+```yaml
+flags:
+  EnableHTTPServer: true
+```
+
+Start Mixer with the flag config and HTTP port:
+
+```bash
+./run_server.sh \
+  --feature_flags_path=$PWD/deploy/featureflags/local.yaml \
+  --http_port=8082
+```
+
+Set `--http_port=0` to disable the listener even when `EnableHTTPServer` is
+true. When enabled, only `GET /v2/node` and `POST /v2/node` are available on
+the native HTTP listener.
+
 ## Log Level Configuration
 
 You can configure the logging level using the `MIXER_LOG_LEVEL` environment variable.
