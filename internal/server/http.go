@@ -29,6 +29,7 @@ import (
 )
 
 type v2NodeCaller func(context.Context, *pbv2.NodeRequest) (*pbv2.NodeResponse, error)
+type observationCaller func(context.Context, *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error)
 
 type httpErrorResponse struct {
 	Code    int    `json:"code"`
@@ -39,6 +40,8 @@ type httpErrorResponse struct {
 func (s *Server) HTTPHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/v2/node", newV2NodeHTTPHandler(s.V2Node))
+	mux.Handle("/v2/observation", newObservationHTTPHandler("/v2/observation", s.V2Observation))
+	mux.Handle("/v3/observation", newObservationHTTPHandler("/v3/observation", s.V3Observation))
 	return mux
 }
 
@@ -55,6 +58,40 @@ func newV2NodeHTTPHandler(call v2NodeCaller) http.Handler {
 		}
 
 		req, err := parseV2NodeHTTPRequest(r)
+		if err != nil {
+			writeHTTPError(w, err)
+			return
+		}
+		resp, err := call(contextWithHTTPMetadata(r.Context(), r.Header), req)
+		if err != nil {
+			writeHTTPError(w, err)
+			return
+		}
+		body, err := protojson.Marshal(resp)
+		if err != nil {
+			writeHTTPError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		//nolint:errcheck // Client write failures cannot be recovered here.
+		w.Write(body)
+	})
+}
+
+func newObservationHTTPHandler(path string, call observationCaller) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			w.Header().Set("Allow", "GET, POST")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		req, err := parseObservationHTTPRequest(r)
 		if err != nil {
 			writeHTTPError(w, err)
 			return
@@ -106,6 +143,61 @@ func parseV2NodeHTTPRequest(r *http.Request) (*pbv2.NodeRequest, error) {
 		req.Limit = int32(parsedLimit)
 	}
 	return req, nil
+}
+
+func parseObservationHTTPRequest(r *http.Request) (*pbv2.ObservationRequest, error) {
+	if r.Method == http.MethodPost {
+		req := &pbv2.ObservationRequest{}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(body, req); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		return req, nil
+	}
+
+	values := r.URL.Query()
+	req := &pbv2.ObservationRequest{
+		Variable: dcidOrExpressionFromQuery(values, "variable"),
+		Entity:   dcidOrExpressionFromQuery(values, "entity"),
+		Date:     values.Get("date"),
+		Value:    values.Get("value"),
+		Select:   values["select"],
+		Filter:   facetFilterFromQuery(values),
+	}
+	return req, nil
+}
+
+func dcidOrExpressionFromQuery(values map[string][]string, prefix string) *pbv2.DcidOrExpression {
+	result := &pbv2.DcidOrExpression{
+		Dcids:      values[prefix+".dcids"],
+		Expression: firstQueryValue(values, prefix+".expression"),
+		Formula:    firstQueryValue(values, prefix+".formula"),
+	}
+	if len(result.Dcids) == 0 && result.Expression == "" && result.Formula == "" {
+		return nil
+	}
+	return result
+}
+
+func facetFilterFromQuery(values map[string][]string) *pbv2.FacetFilter {
+	result := &pbv2.FacetFilter{
+		Domains:  values["filter.domains"],
+		FacetIds: values["filter.facet_ids"],
+	}
+	if len(result.Domains) == 0 && len(result.FacetIds) == 0 {
+		return nil
+	}
+	return result
+}
+
+func firstQueryValue(values map[string][]string, key string) string {
+	if len(values[key]) == 0 {
+		return ""
+	}
+	return values[key][0]
 }
 
 func contextWithHTTPMetadata(ctx context.Context, header http.Header) context.Context {

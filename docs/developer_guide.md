@@ -80,8 +80,20 @@ Start Mixer with the flag config and HTTP port:
 ```
 
 Set `--http_port=0` to disable the listener even when `EnableHTTPServer` is
-true. When enabled, only `GET /v2/node` and `POST /v2/node` are available on
-the native HTTP listener.
+true. When enabled, these routes are available on the native HTTP listener:
+
+- `GET /v2/node`
+- `POST /v2/node`
+- `GET /v2/observation`
+- `POST /v2/observation`
+- `GET /v3/observation`
+- `POST /v3/observation`
+
+Example observation request:
+
+```bash
+curl 'http://localhost:8082/v2/observation?variable.dcids=Count_Person&entity.dcids=geoId/06&date=LATEST&select=entity&select=value'
+```
 
 ## Log Level Configuration
 

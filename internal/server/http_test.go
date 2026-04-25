@@ -52,6 +52,24 @@ func mustParseNodeResponse(t *testing.T, textproto string) *pbv2.NodeResponse {
 	return resp
 }
 
+func mustParseObservationRequest(t *testing.T, textproto string) *pbv2.ObservationRequest {
+	t.Helper()
+	req := &pbv2.ObservationRequest{}
+	if err := prototext.Unmarshal([]byte(textproto), req); err != nil {
+		t.Fatalf("failed to parse ObservationRequest textproto: %v", err)
+	}
+	return req
+}
+
+func mustParseObservationResponse(t *testing.T, textproto string) *pbv2.ObservationResponse {
+	t.Helper()
+	resp := &pbv2.ObservationResponse{}
+	if err := prototext.Unmarshal([]byte(textproto), resp); err != nil {
+		t.Fatalf("failed to parse ObservationResponse textproto: %v", err)
+	}
+	return resp
+}
+
 func TestV2NodeHTTPGetBindsRequest(t *testing.T) {
 	var gotReq *pbv2.NodeRequest
 	var gotCtx context.Context
@@ -214,15 +232,210 @@ func TestV2NodeHTTPUnsupportedMethodReturnsMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestHTTPHandlerUnknownPathReturnsNotFound(t *testing.T) {
-	handler := (&Server{}).HTTPHandler()
+func TestV2ObservationHTTPGetBindsRequest(t *testing.T) {
+	var gotReq *pbv2.ObservationRequest
+	handler := newObservationHTTPHandler("/v2/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		gotReq = proto.Clone(req).(*pbv2.ObservationRequest)
+		return &pbv2.ObservationResponse{}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v2/observation?variable.dcids=Count_Person&variable.dcids=Count_Farm&entity.expression=geoId/06%3C-containedInPlace%2B%7BtypeOf%3ACounty%7D&date=LATEST&value=10&select=entity&select=value&filter.domains=cdc.gov&filter.facet_ids=123", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	want := mustParseObservationRequest(t, `
+variable: {
+  dcids: "Count_Person"
+  dcids: "Count_Farm"
+}
+entity: {
+  expression: "geoId/06<-containedInPlace+{typeOf:County}"
+}
+date: "LATEST"
+value: "10"
+filter: {
+  domains: "cdc.gov"
+  facet_ids: "123"
+}
+select: "entity"
+select: "value"
+`)
+	if diff := cmp.Diff(want, gotReq, protocmp.Transform()); diff != "" {
+		t.Fatalf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestV3ObservationHTTPGetRoutesToV3Caller(t *testing.T) {
+	var called bool
+	var gotReq *pbv2.ObservationRequest
+	handler := newObservationHTTPHandler("/v3/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		called = true
+		gotReq = proto.Clone(req).(*pbv2.ObservationRequest)
+		return &pbv2.ObservationResponse{}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v3/observation?variable.formula=Count_Person-Count_Person_Female&entity.dcids=geoId/06", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if !called {
+		t.Fatal("V3 observation caller was not called")
+	}
+	want := mustParseObservationRequest(t, `
+variable: {
+  formula: "Count_Person-Count_Person_Female"
+}
+entity: {
+  dcids: "geoId/06"
+}
+`)
+	if diff := cmp.Diff(want, gotReq, protocmp.Transform()); diff != "" {
+		t.Fatalf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestV2ObservationHTTPPostBindsRequest(t *testing.T) {
+	var gotReq *pbv2.ObservationRequest
+	handler := newObservationHTTPHandler("/v2/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		gotReq = proto.Clone(req).(*pbv2.ObservationRequest)
+		return &pbv2.ObservationResponse{}, nil
+	})
+
+	body := `{"variable":{"dcids":["Count_Person"]},"entity":{"dcids":["geoId/06"]},"date":"2020","select":["entity","value"],"extra":"ignored"}`
+	req := httptest.NewRequest(http.MethodPost, "/v2/observation", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	want := mustParseObservationRequest(t, `
+variable: {
+  dcids: "Count_Person"
+}
+entity: {
+  dcids: "geoId/06"
+}
+date: "2020"
+select: "entity"
+select: "value"
+`)
+	if diff := cmp.Diff(want, gotReq, protocmp.Transform()); diff != "" {
+		t.Fatalf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestV2ObservationHTTPSuccessWritesProtoJSON(t *testing.T) {
+	want := mustParseObservationResponse(t, `
+by_variable: {
+  key: "Count_Person"
+  value: {
+    by_entity: {
+      key: "geoId/06"
+      value: {
+        ordered_facets: {
+          facet_id: "123"
+          observations: {
+            date: "2020"
+            value: 39.5
+          }
+          obs_count: 1
+          earliest_date: "2020"
+          latest_date: "2020"
+        }
+      }
+    }
+  }
+}
+facets: {
+  key: "123"
+  value: {
+    import_name: "test"
+    provenance_url: "https://example.org"
+  }
+}
+`)
+	handler := newObservationHTTPHandler("/v2/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		return want, nil
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/v2/observation", nil)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	resp := &pbv2.ObservationResponse{}
+	if err := protojson.Unmarshal(rr.Body.Bytes(), resp); err != nil {
+		t.Fatalf("response is not proto JSON: %v", err)
+	}
+	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
+		t.Fatalf("response mismatch (-want +got):\n%s", diff)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid response JSON: %v", err)
+	}
+	if _, ok := body["byVariable"]; !ok {
+		t.Fatal("response JSON missing byVariable")
+	}
+	if _, ok := body["by_variable"]; ok {
+		t.Fatal("response JSON uses by_variable, want byVariable")
+	}
+}
+
+func TestV2ObservationHTTPUnsupportedMethodReturnsMethodNotAllowed(t *testing.T) {
+	handler := newObservationHTTPHandler("/v2/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		t.Fatal("handler should not be called")
+		return nil, nil
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/v2/observation", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHTTPHandlerUnknownPathReturnsNotFound(t *testing.T) {
+	handler := (&Server{}).HTTPHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/v2/missing", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+}
+
+func TestV2ObservationHTTPGRPCInvalidArgumentReturnsBadRequest(t *testing.T) {
+	handler := newObservationHTTPHandler("/v2/observation", func(ctx context.Context, req *pbv2.ObservationRequest) (*pbv2.ObservationResponse, error) {
+		return nil, status.Error(codes.InvalidArgument, "bad request")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v2/observation", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+	var body httpErrorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid error JSON: %v", err)
+	}
+	if body.Code != int(codes.InvalidArgument) || body.Message != "bad request" {
+		t.Fatalf("body = %+v", body)
 	}
 }
 
