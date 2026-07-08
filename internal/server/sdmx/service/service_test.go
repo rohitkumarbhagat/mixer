@@ -189,13 +189,13 @@ func TestDataCSVSuccess(t *testing.T) {
 						{Date: "2020", Value: "1.50"},
 					},
 					Dimensions: map[string]string{
-						"observationAbout": "country/USA",
-					},
-					Attributes: map[string]string{
+						"observationAbout":  "country/USA",
 						"unit":              "Person",
 						"measurementMethod": "Census",
 						"observationPeriod": "P1Y",
-						"scalingFactor":     "0",
+					},
+					Attributes: map[string]string{
+						"scalingFactor": "0",
 					},
 				},
 			},
