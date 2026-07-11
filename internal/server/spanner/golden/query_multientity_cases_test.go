@@ -346,11 +346,12 @@ var multiEntitySdmxObservationsTestCases = []struct {
 		name: "variable measured, origin, destination and physical column filters",
 		constraints: map[string]*sdmxpb.ConstraintList{
 			"variableMeasured":  {Values: []string{"var1"}},
-			"origin":            {Values: []string{"country/AGO"}},
-			"destination":       {Values: []string{"country/PRT"}},
-			"measurementMethod": {Values: []string{"Census"}},
-			"provenance":        {Values: []string{"dc/base/WTO_TradeConnectivity"}},
-			"unit":              {Values: []string{"Percent"}},
+			"origin":            {Values: []string{"country/AGO", "country/BRA"}},
+			"destination":       {Values: []string{"country/PRT", "country/SGP"}},
+			"measurementMethod": {Values: []string{"Census", "Survey"}},
+			"observationPeriod": {Values: []string{"P1Y", "P1M"}},
+			"provenance":        {Values: []string{"dc/base/WTO_TradeConnectivity", "dc/base/UN_Trade"}},
+			"unit":              {Values: []string{"Percent", "Count"}},
 		},
 		entitySlotByObservationPropertyByStatVar: map[string]map[string]string{
 			"var1": {"origin": "entity1", "destination": "entity2"},

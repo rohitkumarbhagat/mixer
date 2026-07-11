@@ -340,13 +340,11 @@ func (b *multiEntityQueryBuilder) GetSdmxObservationsQuery(
 		entitySlotByObservationProperty := entitySlotByObservationPropertyByStatVar[statVarID]
 
 		for _, componentID := range componentIDs {
-			if entitySlot, ok := entitySlotByObservationProperty[componentID]; ok {
-				varClauses = append(varClauses, fmt.Sprintf("t.%s IN UNNEST(@%s)", entitySlot, componentID))
-			} else if spannerColumn, ok := sdmxStaticDataFilterColumn(componentID); ok {
-				varClauses = append(varClauses, fmt.Sprintf("t.%s IN UNNEST(@%s)", spannerColumn, componentID))
-			} else {
+			spannerColumn, ok := sdmxDataFilterColumn(componentID, entitySlotByObservationProperty)
+			if !ok {
 				return nil, fmt.Errorf("GetSdmxObservationsQuery: unsupported constraint key %q", componentID)
 			}
+			varClauses = append(varClauses, sdmxAllowedValuesClause(spannerColumn, componentID))
 		}
 		varBranches = append(varBranches, "("+strings.Join(varClauses, " AND ")+")")
 	}
@@ -357,6 +355,10 @@ func (b *multiEntityQueryBuilder) GetSdmxObservationsQuery(
 		SQL:    sql,
 		Params: params,
 	}, nil
+}
+
+func sdmxAllowedValuesClause(spannerColumn string, parameter string) string {
+	return fmt.Sprintf("t.%s IN UNNEST(@%s)", spannerColumn, parameter)
 }
 
 // GetSdmxAvailabilityQuery builds the first SDMX availability lookup.

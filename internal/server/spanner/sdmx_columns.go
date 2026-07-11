@@ -28,6 +28,13 @@ func sdmxStaticDataFilterColumn(componentID string) (string, bool) {
 	return spannerColumn, ok
 }
 
+func sdmxDataFilterColumn(componentID string, entitySlotByObservationProperty map[string]string) (string, bool) {
+	if entitySlot, ok := entitySlotByObservationProperty[componentID]; ok {
+		return entitySlot, true
+	}
+	return sdmxStaticDataFilterColumn(componentID)
+}
+
 func sdmxAvailabilityValueColumn(componentID string) (string, bool) {
 	switch componentID {
 	case datacommons.ComponentVariableMeasured:

@@ -214,7 +214,7 @@ func TestDataSuccess(t *testing.T) {
 	}
 }
 
-func TestDataMultiEntityDimensionFilters(t *testing.T) {
+func TestDataDimensionFiltersPreserveMultipleValues(t *testing.T) {
 	ds := &sdmxDataSource{
 		result: testSdmxDataResult([]string{"destinationCountry", "sourceCountry"}, []*sdmxpb.SdmxTimeSeries{
 			{
@@ -232,16 +232,28 @@ func TestDataMultiEntityDimensionFilters(t *testing.T) {
 	}
 	svc := newSdmxTestService(ds)
 
-	_, err := svc.Data(context.Background(), sdmxDataRequest("c[variableMeasured]=Count_Person_Migrated&c[destinationCountry]=country%2FCAN&c[sourceCountry]=country%2FUSA"))
+	_, err := svc.Data(context.Background(), sdmxDataRequest(
+		"c[variableMeasured]=Count_Person_Migrated,Count_Refugee&"+
+			"c[destinationCountry]=country%2FCAN,country%2FMEX&"+
+			"c[sourceCountry]=country%2FUSA,country%2FIND&"+
+			"c[unit]=Person,Traveler&"+
+			"c[measurementMethod]=Census,Survey&"+
+			"c[observationPeriod]=P1Y,P1M&"+
+			"c[provenance]=dc%2Fbase%2Fone,dc%2Fbase%2Ftwo",
+	))
 	if err != nil {
 		t.Fatalf("Data() error = %v", err)
 	}
 
 	wantQuery := &sdmxpb.SdmxDataQuery{
 		Constraints: map[string]*sdmxpb.ConstraintList{
-			"variableMeasured":   {Values: []string{"Count_Person_Migrated"}},
-			"destinationCountry": {Values: []string{"country/CAN"}},
-			"sourceCountry":      {Values: []string{"country/USA"}},
+			"variableMeasured":   {Values: []string{"Count_Person_Migrated", "Count_Refugee"}},
+			"destinationCountry": {Values: []string{"country/CAN", "country/MEX"}},
+			"sourceCountry":      {Values: []string{"country/USA", "country/IND"}},
+			"unit":               {Values: []string{"Person", "Traveler"}},
+			"measurementMethod":  {Values: []string{"Census", "Survey"}},
+			"observationPeriod":  {Values: []string{"P1Y", "P1M"}},
+			"provenance":         {Values: []string{"dc/base/one", "dc/base/two"}},
 		},
 	}
 	if diff := cmp.Diff(wantQuery, ds.got, protocmp.Transform()); diff != "" {
