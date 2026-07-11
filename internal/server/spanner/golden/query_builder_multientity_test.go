@@ -166,7 +166,7 @@ func TestMultiEntityGetSdmxObservationsQuery(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				stmt, err := builder.GetSdmxObservationsQuery(c.constraints, c.entitySlotByObservationPropertyByStatVar)
+				stmt, err := builder.GetSdmxObservationsQuery(c.constraints, c.entitySlotsByStatVar)
 				return stmt, err
 			})
 		})
@@ -186,10 +186,10 @@ func TestMultiEntityGetSdmxObservationsQuery_Validation(t *testing.T) {
 		"provenance":        {Values: []string{"dc/base/INPE_Fire_Event_Count"}},
 		"observationPeriod": {Values: []string{"P1Y"}},
 	}
-	entitySlotByObservationPropertyByStatVar := map[string]map[string]string{
+	entitySlotsByStatVar := map[string]map[string]string{
 		"var1": {"observationAbout": "entity1"},
 	}
-	_, err = builder.GetSdmxObservationsQuery(constraints, entitySlotByObservationPropertyByStatVar)
+	_, err = builder.GetSdmxObservationsQuery(constraints, entitySlotsByStatVar)
 	if err != nil {
 		t.Errorf("expected no error for valid constraint keys, got %v", err)
 	}
@@ -219,7 +219,7 @@ func TestMultiEntityGetSdmxObservationsQuery_Validation(t *testing.T) {
 		"variableMeasured": {Values: []string{"var1"}},
 		"customEntity":     {Values: []string{"value"}},
 	}
-	_, err = builder.GetSdmxObservationsQuery(badConstraints3, entitySlotByObservationPropertyByStatVar)
+	_, err = builder.GetSdmxObservationsQuery(badConstraints3, entitySlotsByStatVar)
 	if err == nil {
 		t.Fatal("expected error for unsupported dynamic constraint key, got nil")
 	}
@@ -246,7 +246,7 @@ func TestMultiEntityGetSdmxObservationsQueryDoesNotUseFacetJSONFallback(t *testi
 	}
 
 	for _, c := range multiEntitySdmxObservationsTestCases {
-		stmt, err := builder.GetSdmxObservationsQuery(c.constraints, c.entitySlotByObservationPropertyByStatVar)
+		stmt, err := builder.GetSdmxObservationsQuery(c.constraints, c.entitySlotsByStatVar)
 		if err != nil {
 			t.Fatalf("GetSdmxObservationsQuery(%q) error = %v", c.name, err)
 		}

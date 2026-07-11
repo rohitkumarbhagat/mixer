@@ -294,7 +294,7 @@ var constraintKeyRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 // GetSdmxObservationsQuery builds the Spanner statement for SDMX observation lookup.
 func (b *multiEntityQueryBuilder) GetSdmxObservationsQuery(
 	constraints map[string]*sdmxpb.ConstraintList,
-	entitySlotByObservationPropertyByStatVar map[string]map[string]string,
+	entitySlotsByStatVar map[string]map[string]string,
 ) (*spanner.Statement, error) {
 	stmts := b.statements
 	// Validate all constraint keys to prevent SQL Injection, and ensure lists are not nil
@@ -337,10 +337,10 @@ func (b *multiEntityQueryBuilder) GetSdmxObservationsQuery(
 
 	for _, statVarID := range statVarIDs {
 		varClauses := []string{fmt.Sprintf("t.variable_measured = %q", statVarID)}
-		entitySlotByObservationProperty := entitySlotByObservationPropertyByStatVar[statVarID]
+		entitySlots := entitySlotsByStatVar[statVarID]
 
 		for _, componentID := range componentIDs {
-			spannerColumn, ok := sdmxDataFilterColumn(componentID, entitySlotByObservationProperty)
+			spannerColumn, ok := sdmxDataFilterColumn(componentID, entitySlots)
 			if !ok {
 				return nil, fmt.Errorf("GetSdmxObservationsQuery: unsupported constraint key %q", componentID)
 			}
