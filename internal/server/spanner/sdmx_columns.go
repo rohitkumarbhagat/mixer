@@ -34,14 +34,3 @@ func sdmxDataFilterColumn(componentID string, entitySlotByObservationProperty ma
 	}
 	return sdmxStaticDataFilterColumn(componentID)
 }
-
-func sdmxAvailabilityValueColumn(componentID string) (string, bool) {
-	switch componentID {
-	case datacommons.ComponentVariableMeasured:
-		return "variable_measured", true
-	case datacommons.ComponentObservationAbout:
-		return "entity1", true
-	default:
-		return sdmxStaticDataFilterColumn(componentID)
-	}
-}
