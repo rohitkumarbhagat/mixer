@@ -7,21 +7,26 @@ version is 1.5.55.
 
 ## Run locally
 
-Install and start the emulator in one terminal:
+On Linux, install or update the emulator component and confirm its version:
 
 ```sh
 gcloud components install cloud-spanner-emulator
 gcloud components update
 gcloud components list --show-versions \
   --filter='id=cloud-spanner-emulator'
-gcloud emulators spanner start
 ```
 
-On macOS, start the emulator with Docker:
+On macOS, install Docker and ensure its daemon is running.
+
+Start the emulator in one terminal:
 
 ```sh
-docker run -d -p 9010:9010 -p 9020:9020 gcr.io/cloud-spanner-emulator/emulator
+./scripts/start_spanner_emulator.sh
 ```
+
+The script uses the native gcloud emulator component on Linux and the official
+Docker image on macOS. It stays attached to the emulator; press `Ctrl-C` to
+stop it. The macOS container is removed automatically.
 
 The component-list command shows the installed and available emulator versions.
 It can also be run from another terminal while the emulator is running; it
@@ -32,16 +37,26 @@ emulator if the installed version is older than 1.5.49.
 Run the tests from another terminal:
 
 ```sh
-export SPANNER_EMULATOR_HOST=localhost:9010
-RUN_SPANNER_EMULATOR_TESTS=true go test ./internal/server/spanner/golden/emulator -count=1 -v
+./scripts/run_spanner_emulator_tests.sh
 ```
 
-The tests fail before creating resources unless `SPANNER_EMULATOR_HOST` uses
-the exact host `localhost`. See the official
+The test script defaults `SPANNER_EMULATOR_HOST` to `localhost:9010` and rejects
+non-localhost endpoints before running tests. See the official
 [Spanner emulator documentation](https://cloud.google.com/spanner/docs/emulator)
 for installation and environment setup, and the emulator
 [README](https://github.com/GoogleCloudPlatform/cloud-spanner-emulator/blob/master/README.md)
 for supported features and limitations.
+
+To troubleshoot the wrapper, the equivalent platform commands are:
+
+```sh
+# Linux
+gcloud emulators spanner start --host-port=localhost:9010 --rest-port=9020
+
+# macOS
+docker run --rm -p 9010:9010 -p 9020:9020 \
+  gcr.io/cloud-spanner-emulator/emulator
+```
 
 Without `RUN_SPANNER_EMULATOR_TESTS=true`, pure fixture-loader tests still run
 and emulator-backed tests are reported as skipped. Add future emulator test
@@ -86,11 +101,12 @@ timestamps so Mixer reads a timestamp containing the complete fixture.
 ### Update only emulator-test goldens:
 
 ```sh
-SPANNER_EMULATOR_HOST=localhost:9010 RUN_SPANNER_EMULATOR_TESTS=true GENERATE_GOLDEN=true go test ./internal/server/spanner/golden/emulator -count=1 -v
+./scripts/run_spanner_emulator_tests.sh --generate-goldens
 ```
 
-Verify the updated goldens:
+This regenerates every golden in the emulator package. Inspect the changes and
+then verify them without generation:
 
 ```sh
-SPANNER_EMULATOR_HOST=localhost:9010 RUN_SPANNER_EMULATOR_TESTS=true go test ./internal/server/spanner/golden/emulator -count=1 -v
+./scripts/run_spanner_emulator_tests.sh
 ```
