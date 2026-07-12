@@ -29,6 +29,8 @@ import (
 	mixerspanner "github.com/datacommonsorg/mixer/internal/server/spanner"
 	"github.com/datacommonsorg/mixer/test"
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestSDMXData(t *testing.T) {
@@ -57,6 +59,26 @@ func TestSDMXData(t *testing.T) {
 			name:   "explicit middle observationAbout",
 			query:  "c[variableMeasured]=Count_MigrationByObservationAbout&c[destinationCountry]=country%2FCAN&c[observationAbout]=country%2FMEX&c[sourceCountry]=country%2FUSA",
 			golden: "data_explicit_observation_about.csv",
+		},
+		{
+			name:   "compatible stat variables",
+			query:  "c[variableMeasured]=Count_Migration,Count_Refugee",
+			golden: "data_compatible_stat_vars.csv",
+		},
+		{
+			name: "multiple values for every dimension",
+			query: "c[variableMeasured]=Count_Migration,Count_Refugee&" +
+				"c[destinationCountry]=country%2FCAN,country%2FMEX&" +
+				"c[sourceCountry]=country%2FUSA,country%2FIND&" +
+				"c[unit]=Count,Percent&c[measurementMethod]=Census,Survey&" +
+				"c[observationPeriod]=P1Y,P1M&" +
+				"c[provenance]=dc%2Fbase%2FHumanReadableStatVars,dc%2Fbase%2FOther",
+			golden: "data_multiple_values.csv",
+		},
+		{
+			name:   "empty result",
+			query:  "c[variableMeasured]=Count_Migration&c[destinationCountry]=country%2FZZZ",
+			golden: "data_empty.csv",
 		},
 	}
 	for _, testCase := range tests {
@@ -94,6 +116,32 @@ func TestSDMXAvailability(t *testing.T) {
 			query:     "c[variableMeasured]=Count_MigrationByObservationAbout&c[destinationCountry]=country%2FCAN&c[sourceCountry]=country%2FUSA",
 			golden:    "availability_explicit_observation_about.json",
 		},
+		{
+			name:      "fixed dimension",
+			component: "unit",
+			query: "c[variableMeasured]=Count_Migration,Count_Refugee&" +
+				"c[destinationCountry]=country%2FCAN,country%2FMEX&" +
+				"c[sourceCountry]=country%2FUSA,country%2FIND",
+			golden: "availability_unit.json",
+		},
+		{
+			name:      "fallback observationAbout",
+			component: "observationAbout",
+			query:     "c[variableMeasured]=Count_Person",
+			golden:    "availability_fallback_observation_about.json",
+		},
+		{
+			name:      "variable measured",
+			component: "variableMeasured",
+			query:     "c[variableMeasured]=Count_Migration,Count_Refugee",
+			golden:    "availability_variable_measured.json",
+		},
+		{
+			name:      "empty result",
+			component: "sourceCountry",
+			query:     "c[variableMeasured]=Count_Migration&c[destinationCountry]=country%2FZZZ",
+			golden:    "availability_empty.json",
+		},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -107,6 +155,19 @@ func TestSDMXAvailability(t *testing.T) {
 			}
 			compareEmulatorGolden(t, testCase.golden, string(response.Body), true)
 		})
+	}
+}
+
+func TestSDMXRejectsIncompatibleStatVariableShapes(t *testing.T) {
+	sdmxService := newSDMXService(requireSuite(t).spannerClient)
+	_, err := sdmxService.Data(context.Background(), emulatorDataRequest(
+		"c[variableMeasured]=Count_Migration,Count_Person",
+	))
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("Data() code = %v, want %v; err = %v", status.Code(err), codes.InvalidArgument, err)
+	}
+	if !strings.Contains(status.Convert(err).Message(), "incompatible observationProperties") {
+		t.Fatalf("Data() message = %q, want incompatible observationProperties", status.Convert(err).Message())
 	}
 }
 
