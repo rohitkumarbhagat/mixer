@@ -73,10 +73,12 @@ SDMX-required subset of
 `import/pipeline/workflow/ingestion-helper/clients/schema.sql` from the Data
 Commons repo. Every statement must begin with `CREATE` and end with a
 semicolon, either on the same line or a separate line. Semicolons inside SQL
-strings and comments are unsupported; keep explanatory text in this README.
+strings are unsupported. Full-line comments whose trimmed content starts with
+`--` are ignored; inline comments are unsupported.
 
 `testdata/seed.sql` contains one static `INSERT` statement per paragraph. Blank
 lines delimit statements, and blank lines inside a statement are unsupported.
+Full-line `--` comments are ignored; inline comments are unsupported.
 All nodes, edges, time series, and observations are committed first. A
 successful `IngestionHistory` row is then committed with Spanner commit
 timestamps so Mixer reads a timestamp containing the complete fixture.

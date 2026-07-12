@@ -237,7 +237,7 @@ func emulatorSchemaStatements() ([]string, error) {
 }
 
 func splitEmulatorSchemaStatements(schema string) ([]string, error) {
-	schema = strings.TrimSpace(schema)
+	schema = strings.TrimSpace(withoutSQLCommentLines(schema))
 	if !strings.HasSuffix(schema, ";") {
 		return nil, fmt.Errorf("emulator schema must end with a semicolon")
 	}
@@ -260,7 +260,7 @@ func emulatorSeedStatements() ([]string, error) {
 }
 
 func splitEmulatorSeedStatements(seed string) ([]string, error) {
-	lines := strings.Split(strings.ReplaceAll(seed, "\r\n", "\n"), "\n")
+	lines := strings.Split(withoutSQLCommentLines(seed), "\n")
 	statements := []string{}
 	current := []string{}
 	appendStatement := func() error {
@@ -293,6 +293,14 @@ func splitEmulatorSeedStatements(seed string) ([]string, error) {
 		return nil, fmt.Errorf("emulator seed must contain at least one INSERT statement")
 	}
 	return statements, nil
+}
+
+func withoutSQLCommentLines(sql string) string {
+	lines := strings.Split(strings.ReplaceAll(sql, "\r\n", "\n"), "\n")
+	lines = slices.DeleteFunc(lines, func(line string) bool {
+		return strings.HasPrefix(strings.TrimSpace(line), "--")
+	})
+	return strings.Join(lines, "\n")
 }
 
 func seedEmulatorDatabase(ctx context.Context, databaseName string) error {
@@ -377,6 +385,14 @@ func TestSplitEmulatorSchemaStatements(t *testing.T) {
 			want:   []string{"CREATE TABLE A (id INT64) PRIMARY KEY(id)"},
 		},
 		{
+			name:   "comment lines",
+			schema: "-- schema comment; ignored\nCREATE TABLE A (id INT64) PRIMARY KEY(id);\n  -- another; comment\nCREATE INDEX AByID ON A(id);",
+			want: []string{
+				"CREATE TABLE A (id INT64) PRIMARY KEY(id)",
+				"CREATE INDEX AByID ON A(id)",
+			},
+		},
+		{
 			name:      "missing final terminator",
 			schema:    "CREATE TABLE A (id INT64) PRIMARY KEY(id)",
 			wantError: "must end with a semicolon",
@@ -439,6 +455,14 @@ func TestSplitEmulatorSeedStatements(t *testing.T) {
 			seed: "INSERT INTO A (id)\nVALUES (1);\n\n  \nINSERT INTO B (id) VALUES (2)",
 			want: []string{
 				"INSERT INTO A (id)\nVALUES (1)",
+				"INSERT INTO B (id) VALUES (2)",
+			},
+		},
+		{
+			name: "comment lines",
+			seed: "-- seed comment; ignored\nINSERT INTO A (id) VALUES (1);\n\n  -- another; comment\nINSERT INTO B (id) VALUES (2);",
+			want: []string{
+				"INSERT INTO A (id) VALUES (1)",
 				"INSERT INTO B (id) VALUES (2)",
 			},
 		},
