@@ -72,6 +72,19 @@ type ContainedInPlaceConstraint struct {
 	ChildPlaceType string
 }
 
+type TimePeriodMode int
+
+const (
+	TimePeriodAll TimePeriodMode = iota
+	TimePeriodExplicit
+	TimePeriodLatest
+)
+
+type TimePeriodSelection struct {
+	Mode  TimePeriodMode
+	Dates []string
+}
+
 // DataPropertyRule returns the rule used to validate and compile an SDMX data
 // property constraint.
 func DataPropertyRule(propertyID string) (PropertyRule, bool) {
@@ -118,7 +131,45 @@ func ValidateDataConstraints(constraints map[string]*sdmxpb.SdmxComponentConstra
 			return status.Errorf(codes.InvalidArgument, "SDMX property filters on component %q require containedInPlace+ and typeOf", componentID)
 		}
 	}
+	if _, err := ClassifyTimePeriod(constraints); err != nil {
+		return err
+	}
 	return validateRequiredVariableMeasured(constraints)
+}
+
+// ClassifyTimePeriod returns the request's time selection mode.
+func ClassifyTimePeriod(constraints map[string]*sdmxpb.SdmxComponentConstraint) (TimePeriodSelection, error) {
+	constraint, ok := constraints[ComponentTimePeriod]
+	if !ok {
+		return TimePeriodSelection{Mode: TimePeriodAll}, nil
+	}
+	if len(constraint.GetPredicates()) == 0 {
+		return TimePeriodSelection{}, status.Error(codes.InvalidArgument, "SDMX TIME_PERIOD filter must have at least one value")
+	}
+
+	dates := map[string]struct{}{}
+	latest := false
+	for _, predicate := range constraint.GetPredicates() {
+		if err := validatePredicate(predicate, "SDMX component filter \""+ComponentTimePeriod+"\""); err != nil {
+			return TimePeriodSelection{}, err
+		}
+		value := strings.TrimSpace(predicate.GetValue())
+		if strings.EqualFold(value, "LATEST") {
+			latest = true
+			continue
+		}
+		dates[value] = struct{}{}
+	}
+	if latest && len(dates) > 0 {
+		return TimePeriodSelection{}, status.Error(codes.InvalidArgument, "SDMX TIME_PERIOD filter cannot combine LATEST with explicit dates")
+	}
+	if latest {
+		return TimePeriodSelection{Mode: TimePeriodLatest}, nil
+	}
+	return TimePeriodSelection{
+		Mode:  TimePeriodExplicit,
+		Dates: slices.Sorted(maps.Keys(dates)),
+	}, nil
 }
 
 // ValidateAvailabilityConstraints checks the predicate features supported by
@@ -137,6 +188,13 @@ func ValidateAvailabilityConstraints(constraints map[string]*sdmxpb.SdmxComponen
 				return err
 			}
 		}
+	}
+	timeSelection, err := ClassifyTimePeriod(constraints)
+	if err != nil {
+		return err
+	}
+	if timeSelection.Mode == TimePeriodLatest {
+		return status.Error(codes.InvalidArgument, "SDMX TIME_PERIOD filter LATEST is not valid for availability; use explicit dates")
 	}
 	return validateRequiredVariableMeasured(constraints)
 }
